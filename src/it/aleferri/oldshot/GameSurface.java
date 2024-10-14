@@ -47,38 +47,47 @@ public class GameSurface extends Canvas {
     private final Image cannon;
     private final Image bullet;
     private final Image alien;
-    private final int cannonHeight;
-    private final int leftMostOffset;
+    private final Image boom;
+    private final ScreenProps props;
     private final short[] bullets;
     private final int[] aliens;
     private final int alienScanStart;
     private final int freshAliensLine;
     private final int messageOffsetX;
     private final int messageOffsetY;
-    private final short spritesPerLine;
-    private String message;
+    private final String[] messages;
+    private AliensAnimation aliensAnimation;
+    private Point lastBoom;
+    private int boomDecay;
+    
     private int playerPosition;
+    
 
-    public GameSurface(Image cannon, Image bullet, Image alien, String initialMessage) {
+    public GameSurface(Image cannon, Image bullet, Image alien, Image boom) {
         int bulletLines = (this.getHeight() / 10) - 1;
         int aliensLines = (this.getHeight() / 20) - 1;
-        this.spritesPerLine = (short) (this.getWidth() / 20);
 
-        int leftover = this.getWidth() - (this.spritesPerLine * 20);
-
+        this.props = new ScreenProps(this.getWidth(), this.getHeight());
+        this.boom = boom;
         this.cannon = cannon;
         this.bullet = bullet;
         this.bullets = new short[bulletLines];
         this.alien = alien;
         this.aliens = new int[aliensLines];
-        this.freshAliensLine = calculateAliensFreshLine(spritesPerLine);
-        this.alienScanStart = calculateAliensScanStart(spritesPerLine);
-        this.cannonHeight = this.getHeight() - 20;
+        this.freshAliensLine = calculateAliensFreshLine(this.props.spritesPerLine);
+        this.alienScanStart = calculateAliensScanStart(this.props.spritesPerLine);
         this.playerPosition = (this.getWidth() / 2) - 10;
-        this.leftMostOffset = leftover / 2;
+        
         this.messageOffsetX = this.getWidth() / 2;
         this.messageOffsetY = this.getHeight() / 2;
-        this.message = initialMessage + ": " + freshAliensLine;
+        this.messages = new String[3];
+        
+        this.boomDecay = 0;
+        this.lastBoom = null;
+
+        short zero = 0;
+
+        this.aliensAnimation = new AliensAnimation(zero, zero, zero, 0);
 
         for (int i = 0; i < this.bullets.length; i++) {
             this.bullets[i] = -1;
@@ -95,14 +104,21 @@ public class GameSurface extends Canvas {
         g.setColor(0x00D7FF);
         g.fillRect(0, 0, w, h);
 
-        g.drawImage(this.cannon, this.playerPosition, this.cannonHeight, 0);
+        g.drawImage(this.cannon, this.playerPosition, this.props.cannotOffsetY, 0);
 
         // Set the current color to red, the font to the default font and 
         // draw a string to the center of the screen.
         g.setColor(0xFF0000);
         g.setFont(Font.getDefaultFont());
-        g.drawString(message, this.messageOffsetX, this.messageOffsetY,
-                Graphics.BASELINE | Graphics.HCENTER);
+
+        for (int msgRow = 0; msgRow < this.messages.length; msgRow++) {
+            String msg = this.messages[msgRow];
+
+            if (msg != null && msg.length() != 0) {
+                g.drawString(msg, this.messageOffsetX, this.messageOffsetY + (20 * msgRow),
+                        Graphics.BASELINE | Graphics.HCENTER);
+            }
+        }
 
         int bulletHOffset = 0;
         for (int i = 0; i < this.bullets.length; i++) {
@@ -118,7 +134,8 @@ public class GameSurface extends Canvas {
             bulletHOffset += 10;
         }
 
-        int alienHOffset = 0;
+        int alienHOffset = this.aliensAnimation.gOffsetY;
+
         for (int k = 0; k < this.aliens.length; k++) {
             int line = this.aliens[k];
 
@@ -126,17 +143,21 @@ public class GameSurface extends Canvas {
             int a2b1 = a2b0 + 1;
 
             if (line >= 0) {
-                int wOffset = this.leftMostOffset;
+                int wOffset = this.props.leftMostOffset + this.aliensAnimation.gOffsetX;
                 int cursor = this.alienScanStart;
 
-                for (int i = 0; i < this.spritesPerLine; i++) {
+                for (int i = 0; i < this.props.spritesPerLine; i++) {
                     if ((cursor & line) > 0) {
                         // Alien there, is there a bullet too?
                         if (this.bullets[a2b1] >= wOffset && this.bullets[a2b1] <= (wOffset + 20)) {
-                            // Hit, TODO: draw explosion
+                            // Hit
                             line = line ^ cursor; // Remove the alien
                             this.aliens[k] = line;
                             this.bullets[a2b1] = -1; // But also remove the bullet
+                            
+                            // Then register the BOOM!
+                            this.lastBoom = new Point((short)wOffset, (short)alienHOffset);
+                            this.boomDecay = 2;
                         } else {
                             g.drawImage(this.alien, wOffset, alienHOffset, 0);
                         }
@@ -149,6 +170,10 @@ public class GameSurface extends Canvas {
 
             alienHOffset += 20;
         }
+        
+        if (this.lastBoom != null) {
+            g.drawImage(this.boom, this.lastBoom.x, this.lastBoom.y, 0);
+        }
     }
 
     public void slideBullets() {
@@ -157,6 +182,12 @@ public class GameSurface extends Canvas {
             this.bullets[i] = this.bullets[i + 1];
         }
         this.bullets[last] = -1;
+        
+        if (this.boomDecay > 0) {
+            this.boomDecay--;
+        } else {
+            this.lastBoom = null;
+        }
 
         this.repaint();
     }
@@ -164,11 +195,7 @@ public class GameSurface extends Canvas {
     public void slideAliens() {
         int last = this.aliens.length - 1;
         for (int i = last; i > 0; i--) {
-            if ((i & 1) == 1) {
-                this.aliens[i] = this.aliens[i - 1] << 1;
-            } else {
-                this.aliens[i] = this.aliens[i - 1] >> 1;
-            }
+            this.aliens[i] = this.aliens[i - 1];
         }
         this.aliens[0] = this.freshAliensLine >> 1;
 
@@ -193,7 +220,7 @@ public class GameSurface extends Canvas {
                 break;
             case UP:
                 short wOffset = (short) (this.playerPosition + 5);
-                int bIndex = (this.cannonHeight - 10) / 10;
+                int bIndex = (this.props.cannotOffsetY - 10) / 10;
                 this.bullets[bIndex] = wOffset;
                 break;
             default:
@@ -202,16 +229,32 @@ public class GameSurface extends Canvas {
 
         String keyName = this.getKeyName(keyCode);
 
-        this.message = keyName;
+        this.resetMessages();
+        this.addMessage("Key: " + keyName);
 
         this.repaint();
     }
 
-    public void setMessage(String message) {
-        this.message = message;
+    public void setAliensAnimation(AliensAnimation aAnimation) {
+        this.aliensAnimation = aAnimation;
     }
 
     public void setPlayerPosition(int playerPosition) {
         this.playerPosition = playerPosition;
+    }
+    
+    public void resetMessages() {
+        for (int i = 0; i < this.messages.length; i++) {
+            this.messages[i] = null;
+        }
+    }
+    
+    public void addMessage(String message) {
+        for (int i = 0; i < this.messages.length; i++) {
+            if (this.messages[i] == null || this.messages[i].length() == 0) {
+                this.messages[i] = message;
+                return;
+            }
+        }
     }
 }

@@ -65,6 +65,14 @@ public class OldShot extends MIDlet {
             return;
         }
         
+        Image boom;
+        try {
+            boom = this.loadImage(ASSETS_DIR + "/boom.png");
+        } catch (IOException ioe) {
+            ioe.printStackTrace();
+            return;
+        }
+        
         Image alien;
         try {
             alien = this.loadImage(ASSETS_DIR + "/alien.png");
@@ -73,7 +81,12 @@ public class OldShot extends MIDlet {
             return;
         }
         
-        GameSurface gameSurface = new GameSurface(cannon, bullet, alien, "Welcome, press any key!");
+        long memory = Runtime.getRuntime().totalMemory();
+        memory = memory / 1024;
+        
+        GameSurface gameSurface = new GameSurface(cannon, bullet, alien, boom);
+        gameSurface.addMessage("Welcome, press any key!");
+        gameSurface.addMessage("Memory: " + memory + " KB");
         Display.getDisplay(this).setCurrent(gameSurface);
         
         this.current = new GameLoop(gameSurface);

@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package it.aleferri.oldshot;
 
 /**
@@ -21,23 +20,29 @@ package it.aleferri.oldshot;
  * @author Alessio
  */
 public class GameLoop implements Runnable {
-    
+
     private final static int COUNTDOWN = 24;
-    
+    private final static int ANIMATION_STEP = 10;
+
     private final GameSurface surface;
     private int frameCount;
     private boolean running;
+    private AliensAnimation aliensAnimation;
 
     public GameLoop(GameSurface surface) {
         this.running = false;
         this.frameCount = COUNTDOWN;
         this.surface = surface;
+
+        short zero = 0;
+        this.aliensAnimation = new AliensAnimation(zero, zero, zero, ANIMATION_STEP);
     }
-    
+
     public void run() {
         this.running = true;
-        
-        this.surface.slideAliens();
+
+        this.aliensAnimation.start();
+        this.surface.setAliensAnimation(aliensAnimation);
 
         while (this.running) {
             try {
@@ -45,11 +50,18 @@ public class GameLoop implements Runnable {
 
                 this.surface.slideBullets();
                 this.frameCount -= 1;
-                
+
                 if (this.frameCount <= 0) {
                     this.frameCount = COUNTDOWN;
+                }
+
+                boolean changePhase = this.aliensAnimation.tick();
+                this.surface.setAliensAnimation(aliensAnimation);
+                
+                if (changePhase && this.aliensAnimation.phase == AliensAnimation.PHASE_LINE) {
                     this.surface.slideAliens();
                 }
+                
             } catch (InterruptedException ex) {
                 ex.printStackTrace();
             } catch (RuntimeException re) {
@@ -57,5 +69,5 @@ public class GameLoop implements Runnable {
             }
         }
     }
-    
+
 }
